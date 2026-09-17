@@ -1,0 +1,18 @@
+# Clinerules for Open Wearables/Trainer Agent
+
+## Project-Specific Rules
+- All wearable API integrations must use async/await patterns
+- Heart rate data must be validated before storage
+- GPS coordinates must be sanitized (remove precision beyond 4 decimal places)
+- Workout sessions must have start/end timestamps
+- Recovery metrics require 24-hour rolling windows
+
+## Security
+- Never log API keys or OAuth tokens
+- All device credentials in `.env` (git-ignored)
+- Audit all third-party wearable SDK dependencies quarterly
+
+## Testing
+- Unit tests required for all data transformation functions
+- Integration tests for each wearable API endpoint
+- Mock external APIs in test environment

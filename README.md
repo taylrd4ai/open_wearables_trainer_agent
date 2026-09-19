@@ -1,60 +1,76 @@
-# Open Wearables / Trainer Agent
+# Open Wearables Trainer Agent
 
-Fitness wearable integration and training management system.
+A wearable-driven training coach. It ingests biometric and workout data, generates training
+recommendations and trainer messages, and surfaces everything in a web dashboard.
 
-## Features
+Built around an agent-first workflow: `AGENTS.md` defines the rules coding agents follow when
+working in this repo, and `.clinerules` carries Cline-specific behavior.
 
-- **Heart rate zone training** — real-time HR monitoring with zone alerts
-- **Workout tracking** — automatic rep counting and exercise detection
-- **Recovery metrics** — HRV, resting heart rate, sleep quality analysis
-- **Multi-device support** — Garmin, Fitbit, Polar, and generic BLE HRM
+## Stack
 
-## Project Structure
+- **Backend** — FastAPI REST API (`backend/app`), Alembic migrations, pytest
+- **Frontend** — React + TypeScript + Vite + Tailwind, served with an nginx-based Docker image
+- **Orchestration** — Docker Compose (one command brings up the full stack)
+- **CI** — GitHub Actions runs backend pytest and frontend typecheck on every push to `main`
 
+## Repository layout
+
+| Path | Purpose |
+|---|---|
+| `backend/app/` | FastAPI application: API routers (`api/v1/`), models, services, config, database |
+| `backend/migrations/` | Alembic database migrations |
+| `backend/tests/` | Backend pytest suite |
+| `frontend/src/` | React app: routes, page components, hooks |
+| `docker-compose.yml` | Full-stack local orchestration |
+| `AGENTS.md` | Instructions and guardrails for AI coding agents in this repo |
+
+## Quickstart
+
+Prerequisites: Docker and Docker Compose.
+
+```bash
+git clone https://github.com/taylrd4ai/open_wearables_trainer_agent.git
+cd open_wearables_trainer_agent
+cp frontend/.env.example frontend/.env
+docker compose up --build
 ```
-open_wearables_trainer_agent/
-├── src/
-│   ├── wearables/       # Device API integrations
-│   └── training/        # Workout logic and algorithms
-├── tests/               # Unit and integration tests
-├── .agents/             # AI agent configurations
-├── .clinerules          # Cline-specific rules
-└── AGENTS.md            # Project context for AI assistants
+
+Then open the dashboard at **http://localhost:3001**.
+
+Required environment values are documented in `frontend/.env.example` and `backend/app/config.py`.
+
+## Local development (without Docker)
+
+Backend:
+
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate   # .venv\Scripts\activate on Windows
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload
 ```
 
-## Setup
+Frontend:
 
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+cd frontend
+npm ci
+npm run dev
+```
 
-2. Configure wearable credentials in `.env`:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your API keys
-   ```
+## Testing
 
-3. Run tests:
-   ```bash
-   pytest tests/
-   ```
+- Backend: `cd backend && pytest`
+- Frontend typecheck: `cd frontend && npx tsc --noEmit`
+- Both run automatically in CI (`.github/workflows/ci.yml`)
 
-## Shared Layer
+## Working with coding agents
 
-This project uses the shared Hermes layer at `../shared/` for:
-- Agent modes (coding, audit, review)
-- Telegram bridge integration
-- Common utilities
-
-Pin to version 1.0.0 (see `AGENTS.md`).
-
-## Development
-
-- **Coding mode** — implement new wearable integrations
-- **Audit mode** — security review of device APIs
-- **Review mode** — code quality and test coverage
+Read `AGENTS.md` first — it is the canonical contract for agent behavior (structure, test
+requirements, definition of done). Keep it updated when conventions change; do not leave stale
+copies lying around.
 
 ## License
 
-Private — internal use only.
+MIT — see [LICENSE](LICENSE).

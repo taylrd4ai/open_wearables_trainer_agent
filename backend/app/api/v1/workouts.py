@@ -22,11 +22,22 @@ async def complete_workout(request: WorkoutLogRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=422, detail=str(e))
 
 
+@router.get("/workouts")
+async def get_workouts(
+    user_id: str = "", limit: int = 20, offset: int = 0
+) -> List[Dict[str, Any]]:
+    """Return workout history for a user.
+
+    Stub: returns empty list until DB integration is complete.
+    """
+    return []
+
+
 @router.get("/workout/history")
 async def get_workout_history(
     user_id: str = "", limit: int = 20, offset: int = 0
 ) -> List[Dict[str, Any]]:
-    """Return workout history for a user.
+    """Return workout history for a user (deprecated, use /workouts).
 
     Stub: returns empty list until DB integration is complete.
     """

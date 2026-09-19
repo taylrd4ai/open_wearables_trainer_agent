@@ -1,6 +1,7 @@
 """Biometric data aggregation service."""
 
 from typing import Any, Dict, List
+from datetime import datetime
 
 from app.config import settings
 from app.services.providers.whoop import WhoopProvider
@@ -32,14 +33,14 @@ def _get_configured_providers() -> List[Any]:
 def _generate_mock_summary(user_id: str) -> Dict[str, Any]:
     """Generate synthetic biometric summary when no providers are configured."""
     return {
-        "user_id": user_id,
-        "recovery_percent": 72.0,
-        "hrv": 58.5,
+        "recovery_percentage": 72.0,
+        "hrv_ms": 58.5,
         "strain_score": 12.5,
-        "vo2_max_estimate": 45.0,
-        "training_load": 350.0,
-        "source_provider": "mock",
-        "is_mock": True,
+        "vo2_max": 45.0,
+        "resting_hr": 65,
+        "sleep_hours": 7.5,
+        "sleep_quality": "good",
+        "last_updated": datetime.now().isoformat(),
     }
 
 
@@ -65,17 +66,22 @@ async def get_biometric_summary(user_id: str) -> Dict[str, Any]:
     if not summaries:
         return _generate_mock_summary(user_id)
 
-    # Average across providers
-    result: Dict[str, Any] = {"user_id": user_id, "is_mock": False}
+    # Average across providers - normalize to frontend schema
+    result: Dict[str, Any] = {}
     numeric_keys = [
-        "recovery_percent", "hrv", "strain_score",
-        "vo2_max_estimate", "training_load",
+        ("recovery_percentage", "recovery_percent"),
+        ("hrv_ms", "hrv"),
+        ("strain_score", "strain_score"),
+        ("vo2_max", "vo2_max_estimate"),
+        ("resting_hr", "resting_hr"),
+        ("sleep_hours", "sleep_hours"),
     ]
-    for key in numeric_keys:
-        values = [s[key] for s in summaries if s.get(key) is not None]
-        result[key] = sum(values) / len(values) if values else None
+    
+    for frontend_key, backend_key in numeric_keys:
+        values = [s.get(backend_key) for s in summaries if s.get(backend_key) is not None]
+        result[frontend_key] = sum(values) / len(values) if values else 0
 
-    result["source_provider"] = ",".join(
-        s.get("source_provider", "unknown") for s in summaries
-    )
+    result["sleep_quality"] = summaries[0].get("sleep_quality", "unknown")
+    result["last_updated"] = datetime.now().isoformat()
+    
     return result

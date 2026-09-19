@@ -1,6 +1,6 @@
 """Workout recommendation API routes."""
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -18,6 +18,15 @@ class GenerateRequest(BaseModel):
     location: str = Field(default="gym")
     muscle_group: str = Field(default="full_body")
     history_volume: float = Field(default=0.0)
+
+
+@router.get("/recommendations")
+async def get_recommendations(user_id: str = "default") -> List[Dict[str, Any]]:
+    """Return personalized recommendations for a user.
+
+    Stub: returns empty list until DB integration is complete.
+    """
+    return []
 
 
 @router.post("/workout/generate-v2")

@@ -17,14 +17,13 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
 
     # Biometric provider keys - all optional for mock mode
-    WHOOP_CLIENT_ID: str = ""
-    WHOOP_CLIENT_SECRET: str = ""
-    GARMIN_CLIENT_ID: str = ""
-    GARMIN_CLIENT_SECRET: str = ""
-    OURA_CLIENT_ID: str = ""
-    OURA_CLIENT_SECRET: str = ""
-    POLAR_CLIENT_ID: str = ""
-    POLAR_CLIENT_SECRET: str = ""
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@db:5432/ow_trainer"
+    CORS_ORIGINS: List[str] = ["http://localhost:3001", "http://localhost:8000"]
+
+    # Open Wearables platform connection (OW owns provider OAuth + tokens)
+    OPEN_WEARABLES_BASE_URL: str = "http://host.docker.internal:8000"
+    OPEN_WEARABLES_API_KEY: str = "sk-5f2d7d1dd1712ddf79e558e7d5531384"
+    OPEN_WEARABLES_USER_ID: str = "b7435467-702d-4aba-b71f-13358eb25736"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

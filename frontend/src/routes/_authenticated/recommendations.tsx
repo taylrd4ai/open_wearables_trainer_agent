@@ -42,7 +42,7 @@ function RecommendationsPage() {
                 </div>
               </div>
               <p className="text-sm text-gray-400 leading-relaxed">{rec.description}</p>
-              <p className="text-xs text-gray-600 mt-3">{new Date(rec.created_at).toLocaleString()}</p>
+              <p className="text-xs text-gray-600 mt-3">{rec.created_at ? new Date(rec.created_at).toLocaleString() : ''}</p>
             </Card>
           ))}
         </div>

@@ -37,6 +37,7 @@ const personaStyles: Record<string, { border: string; bg: string; text: string; 
 };
 
 export function TrainerMessage({ data }: TrainerMessageProps) {
+  if (!data) return null;
   const style = personaStyles[data.persona_mode] || personaStyles.standard;
 
   return (
@@ -44,7 +45,7 @@ export function TrainerMessage({ data }: TrainerMessageProps) {
       <div className="flex items-center justify-between mb-3">
         <span className={`text-xs ${style.text} ${style.font}`}>{style.label}</span>
         <span className="text-xs text-gray-500">
-          {new Date(data.timestamp).toLocaleString()}
+          {data.timestamp ? new Date(data.timestamp).toLocaleString() : ''}
         </span>
       </div>
       <p className={`text-sm leading-relaxed ${style.text} ${style.font}`}>

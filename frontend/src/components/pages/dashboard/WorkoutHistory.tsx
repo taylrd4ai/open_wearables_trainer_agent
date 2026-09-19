@@ -5,11 +5,18 @@ import { ErrorState } from '../../ui/ErrorState';
 import { useWorkouts } from '../../../hooks/useWorkouts';
 
 export function WorkoutHistory() {
-  const { data: workouts, isLoading, isError, refetch } = useWorkouts();
+  const { data, isLoading, isError, refetch } = useWorkouts();
+
+  // Normalize: API may return an object or array
+  const workouts: unknown[] = Array.isArray(data)
+    ? data
+    : data && typeof data === 'object' && 'workouts' in data && Array.isArray((data as Record<string, unknown>).workouts)
+      ? ((data as Record<string, unknown>).workouts as unknown[])
+      : [];
 
   if (isLoading) return <LoadingSpinner />;
   if (isError) return <ErrorState message="Failed to load workouts" onRetry={() => void refetch()} />;
-  if (!workouts || workouts.length === 0) {
+  if (workouts.length === 0) {
     return <Card><p className="text-center text-gray-500">No workouts logged yet.</p></Card>;
   }
 
@@ -19,7 +26,7 @@ export function WorkoutHistory() {
         <h3 className="text-lg font-semibold text-gray-100">Recent Workouts</h3>
       </div>
       <div className="divide-y divide-gray-800">
-        {workouts.slice(0, 10).map((w) => (
+        {workouts.slice(0, 10).map((w: any) => (
           <div key={w.id} className="flex items-center justify-between p-4 hover:bg-gray-800/50 transition-colors">
             <div>
               <p className="font-medium text-gray-100">{w.type}</p>
@@ -28,8 +35,8 @@ export function WorkoutHistory() {
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-400">{w.duration_minutes} min</span>
               <span className="text-sm text-gray-400">{w.total_volume_kg} kg</span>
-              <Badge variant={w.avg_rpe >= 8 ? 'danger' : w.avg_rpe >= 6 ? 'warning' : 'success'}>
-                RPE {w.avg_rpe.toFixed(1)}
+              <Badge variant={(w.avg_rpe ?? 0) >= 8 ? 'danger' : (w.avg_rpe ?? 0) >= 6 ? 'warning' : 'success'}>
+                RPE {w.avg_rpe != null ? w.avg_rpe.toFixed(1) : '—'}
               </Badge>
             </div>
           </div>

@@ -10,13 +10,16 @@ export function BiometricCards() {
   if (isError) return <ErrorState message="Failed to load biometrics" onRetry={() => void refetch()} />;
   if (!data) return null;
 
+  const fmt = (v: unknown, decimals = 1): string =>
+    typeof v === 'number' && !Number.isNaN(v) ? v.toFixed(decimals) : '—';
+
   const metrics = [
-    { label: 'Recovery', value: `${data.recovery_percentage}%`, color: 'text-green-400' },
-    { label: 'HRV', value: `${data.hrv_ms} ms`, color: 'text-blue-400' },
-    { label: 'Strain', value: data.strain_score.toFixed(1), color: 'text-orange-400' },
-    { label: 'VO2 Max', value: data.vo2_max.toFixed(1), color: 'text-purple-400' },
-    { label: 'Resting HR', value: `${data.resting_hr} bpm`, color: 'text-red-400' },
-    { label: 'Sleep', value: `${data.sleep_hours}h`, color: 'text-indigo-400' },
+    { label: 'Recovery', value: `${fmt(data.recovery_percentage, 0)}%`, color: 'text-green-400' },
+    { label: 'HRV', value: `${fmt(data.hrv_ms, 0)} ms`, color: 'text-blue-400' },
+    { label: 'Strain', value: fmt(data.strain_score), color: 'text-orange-400' },
+    { label: 'VO2 Max', value: fmt(data.vo2_max), color: 'text-purple-400' },
+    { label: 'Resting HR', value: `${fmt(data.resting_hr, 0)} bpm`, color: 'text-red-400' },
+    { label: 'Sleep', value: `${fmt(data.sleep_hours)}h`, color: 'text-indigo-400' },
   ];
 
   return (

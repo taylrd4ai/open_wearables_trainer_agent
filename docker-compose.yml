@@ -3,15 +3,15 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "5433:5432"  # OW postgres owns host 5432; trainer uses 5433
     environment:
       POSTGRES_USER: "${DB_USER:-openwearables}"
       POSTGRES_PASSWORD: "${DB_PASSWORD:-changeme_in_production}"
-      POSTGRES_DB: "${DB_NAME:-open_wearables}"
+      POSTGRES_DB: "${DB_NAME:-ow_trainer}"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-openwearables} -d ${DB_NAME:-open_wearables}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-openwearables} -d ${DB_NAME:-ow_trainer}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,15 +22,17 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8001:8000"  # OW API owns host 8000; trainer backend uses 8001
     env_file: .env
     environment:
-      DATABASE_URL: "postgresql+asyncpg://${DB_USER:-openwearables}:${DB_PASSWORD:-changeme_in_production}@db:5432/${DB_NAME:-open_wearables}"
+      DATABASE_URL: "postgresql+asyncpg://${DB_USER:-openwearables}:${DB_PASSWORD:-changeme_in_production}@db:5432/${DB_NAME:-ow_trainer}"
     depends_on:
       db:
         condition: service_healthy
+    # No alembic revisions exist yet; init_db() in app.main creates tables.
+    # Restore `alembic upgrade head &&` here once backend/migrations/versions has real revisions.
     command: >
-      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4"
+      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4"
 
   frontend:
     build:
@@ -38,7 +40,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-            - "3001:80"
+      - "3001:80"
     depends_on:
       - backend
     healthcheck:

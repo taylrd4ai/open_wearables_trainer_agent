@@ -1,70 +1,26 @@
-"""Workout recommendation API routes."""
-
-from typing import Any, Dict, List
-
-from fastapi import APIRouter
-from pydantic import BaseModel, Field
-
-from app.services.workout_planner_v2 import generate_workout_v2
-
-router = APIRouter(tags=["recommendations"])
-
-
-class GenerateRequest(BaseModel):
-    """Request body for workout generation."""
-
-    user_id: str = Field(default="default")
-    objective: str = Field(default="hypertrophy")
-    location: str = Field(default="gym")
-    muscle_group: str = Field(default="full_body")
-    history_volume: float = Field(default=0.0)
-
-
-@router.get("/recommendations")
-async def get_recommendations(user_id: str = "default") -> List[Dict[str, Any]]:
-    """Return personalized recommendations for a user.
-
-    Stub: returns empty list until DB integration is complete.
-    """
-    return []
-
-
-@router.post("/workout/generate-v2")
-async def generate_v2(request: GenerateRequest) -> Dict[str, Any]:
-    """Generate a personalized workout plan V2."""
-    return await generate_workout_v2(
-        user_id=request.user_id,
-        objective=request.objective,
-        location=request.location,
-        muscle_group=request.muscle_group,
-        history_volume=request.history_volume,
-    )
-"""Workout recommendation endpoint.
+"""Workout recommendation endpoint with LLM narration.
 
 Assembles the OW-backed readiness snapshot, applies the client's
-coaching decision rules, and (optionally) calls an LLM purely to
-narrate the prescription in plain language. The LLM never overrides
-the numeric/rule-based decision -- it explains it.
+coaching decision rules (health_engine.recommend_workout), and calls
+an LLM purely to narrate the prescription in plain language. The LLM
+never overrides the rule-based decision -- it only explains it. If the
+LLM call fails for any reason, falls back to a deterministic template
+string so the endpoint never breaks.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from fastapi import APIRouter, Query
 
 from app.services.health_engine import recommend_workout
 from app.services.client_profile import CLIENT_PROFILE, INJURY_CONTEXT
+from app.services.llm_client import generate_coaching_narration
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
 
-def _narrate(decision: Dict[str, Any], snapshot: Dict[str, Any]) -> str:
-    """
-    Deterministic plain-language narration (no LLM call by default).
-
-    Swap this for an LLM call if you want richer phrasing -- pass
-    `decision` and `snapshot` as grounding context in the prompt and
-    instruct the model not to change the prescription, only explain it.
-    """
+def _narrate_fallback(decision: Dict[str, Any], snapshot: Dict[str, Any]) -> str:
+    """Deterministic plain-language narration, used if the LLM call fails."""
     situation = decision["situation"]
     tier = decision.get("recovery_tier", "unknown")
 
@@ -93,14 +49,31 @@ def _narrate(decision: Dict[str, Any], snapshot: Dict[str, Any]) -> str:
     return "No specific rule matched; defaulting to conservative Zone 2 + mobility."
 
 
+async def _narrate_with_llm(decision: Dict[str, Any], snapshot: Dict[str, Any]) -> str:
+    prompt = f"""Today's prescription: {decision['situation']} -> {decision['template']}
+Detail: {decision['detail']}
+Recovery tier: {decision.get('recovery_tier')}
+Recovery score: {snapshot.get('recovery_score')}
+Sleep score: {snapshot.get('sleep_score')}
+Played soccer yesterday: {snapshot.get('played_soccer_yesterday')}
+High strain yesterday: {snapshot.get('high_strain_yesterday')}
+
+Explain why this is today's recommendation in a short, encouraging way.
+"""
+    try:
+        return await generate_coaching_narration(prompt)
+    except Exception:
+        return _narrate_fallback(decision, snapshot)
+
+
 @router.get("/workout")
 async def get_workout_recommendation(no_gym_access: bool = Query(False)) -> Dict[str, Any]:
     """
     Today's workout recommendation, grounded in OW readiness data and
-    the client's coaching handoff decision rules.
+    the client's coaching handoff decision rules, narrated by an LLM.
     """
     result = await recommend_workout(no_gym_access=no_gym_access)
-    narration = _narrate(result["decision"], result["snapshot"])
+    narration = await _narrate_with_llm(result["decision"], result["snapshot"])
 
     return {
         "client": CLIENT_PROFILE["name"],

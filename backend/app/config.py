@@ -22,6 +22,18 @@ class Settings(BaseSettings):
         "http://localhost:8000",
     ]
 
+    # # Primary: OpenRouter (free-tier model), Fallback: local Ollama
+    # OPENROUTER_API_KEY: str = ""
+    # OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"     
+    # OPENROUTER_MODEL: str = "openrouter/free"
+    # OPENROUTER_SITE_URL: str = "http://localhost:3001"   # required by OpenRouter for free tier attribution
+    # OPENROUTER_APP_NAME: str = "open-wearables-trainer"
+    #
+    # OLLAMA_BASE_URL: str = "http://host.docker.internal:11434/v1"
+    # OLLAMA_MODEL: str = "qwen3:8b"
+    #
+    # LLM_TIMEOUT_SECONDS: float = 15.0
+
     # Open Wearables platform connection (OW owns provider OAuth + tokens).
     # Set real values in a gitignored .env or compose environment — never commit.
     OPEN_WEARABLES_BASE_URL: str = "http://host.docker.internal:8000"

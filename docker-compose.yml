@@ -8,6 +8,16 @@ services:
       POSTGRES_USER: "${DB_USER:-openwearables}"
       POSTGRES_PASSWORD: "${DB_PASSWORD:-changeme_in_production}"
       POSTGRES_DB: "${DB_NAME:-ow_trainer}"
+      OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL=${OPENROUTER_MODEL:openrouter/free}
+      OLLAMA_BASE_URL=http://host.docker.internal:11434/v1
+      OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:8b}
+
+      Note: host.docker.internal lets the backend container reach Ollama running
+      on your host machine. On Linux you may instead need:
+       extra_hosts:
+        - "host.docker.internal:host-gateway"
+
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

@@ -3,21 +3,11 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     ports:
-      - "5433:5432"  # OW postgres owns host 5432; trainer uses 5433
+      - "5433:5432" # OW postgres owns host 5432; trainer uses 5433
     environment:
       POSTGRES_USER: "${DB_USER:-openwearables}"
       POSTGRES_PASSWORD: "${DB_PASSWORD:-changeme_in_production}"
       POSTGRES_DB: "${DB_NAME:-ow_trainer}"
-      OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      OPENROUTER_MODEL=${OPENROUTER_MODEL:openrouter/free}
-      OLLAMA_BASE_URL=http://host.docker.internal:11434/v1
-      OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:8b}
-
-      Note: host.docker.internal lets the backend container reach Ollama running
-      on your host machine. On Linux you may instead need:
-       extra_hosts:
-        - "host.docker.internal:host-gateway"
-
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -32,10 +22,18 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "8001:8000"  # OW API owns host 8000; trainer backend uses 8001
+      - "8001:8000" # OW API owns host 8000; trainer backend uses 8001
     env_file: .env
     environment:
       DATABASE_URL: "postgresql+asyncpg://${DB_USER:-openwearables}:${DB_PASSWORD:-changeme_in_production}@db:5432/${DB_NAME:-ow_trainer}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
+      OPENROUTER_MODEL: "${OPENROUTER_MODEL:-openrouter/free}"
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434/v1"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen3:8b}"
+    # host.docker.internal lets the backend container reach Ollama running
+    # on your host machine. On Linux you may instead need:
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy

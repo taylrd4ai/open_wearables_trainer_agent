@@ -13,8 +13,6 @@ from app.api.v1.workouts import router as workouts_router
 from app.api.v1.biometrics import router as biometrics_router
 from app.api.v1.recommendations import router as recommendations_router
 from app.api.v1.providers import router as providers_router
-...
-app.include_router(providers_router, prefix="/api/v1")
 
 
 @asynccontextmanager
@@ -42,6 +40,7 @@ app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(workouts_router, prefix="/api/v1")
 app.include_router(biometrics_router, prefix="/api/v1")
 app.include_router(recommendations_router, prefix="/api/v1")
+app.include_router(providers_router, prefix="/api/v1")
 
 
 @app.get("/healthz")

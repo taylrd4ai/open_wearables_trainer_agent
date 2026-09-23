@@ -22,10 +22,17 @@ class Settings(BaseSettings):
         "http://localhost:8000",
     ]
 
-    # Primary: OpenRouter (free-tier model), Fallback: local Ollama
+    # Primary: OpenRouter free-tier models, tried in order (provider routing
+    # fallback). If the first is rate-limited (429) or errors, OpenRouter
+    # retries the next model in the list automatically. Local Ollama is the
+    # final fallback if every OpenRouter model fails.
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
-    OPENROUTER_MODEL: str = "openrouter/free"
+    OPENROUTER_MODELS: List[str] = [
+        "qwen/qwen3.8-27b:free",
+        "inclusionai/ling-3.0-flash-vl:free",
+        "meta-llama/llama-3.1-8b-instruct:free",
+    ]
     OPENROUTER_SITE_URL: str = "http://localhost:3001"   # required by OpenRouter for free tier attribution
     OPENROUTER_APP_NAME: str = "open-wearables-trainer"
 
@@ -53,9 +60,9 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
-    @field_validator("CORS_ORIGINS", mode="before")
+    @field_validator("CORS_ORIGINS", "OPENROUTER_MODELS", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v: object) -> List[str]:
+    def parse_comma_or_json_list(cls, v: object) -> List[str]:
         if isinstance(v, str):
             try:
                 parsed = json.loads(v)

@@ -1,15 +1,18 @@
-"""LLM wrapper with OpenRouter (free model) as primary and local Ollama as fallback.
+"""LLM wrapper with OpenRouter provider-routing fallback and local Ollama as
+the final fallback.
 
-Both OpenRouter and Ollama expose OpenAI-compatible chat completion APIs,
-so the same AsyncOpenAI client class works for both -- only base_url and
-api_key differ. If the OpenRouter call fails (rate limit, network, free-tier
-model unavailable, etc.), we transparently retry against the local Ollama
-instance before giving up.
+OpenRouter free-tier models share a rate-limited pool, so a single model can
+return 429 under load. Rather than relying on OpenRouter's own multi-model
+routing (which requires a specific request shape), we explicitly try each
+model in settings.OPENROUTER_MODELS in order -- on a 429, timeout, or any
+other failure, we move to the next model. If every OpenRouter model fails,
+we fall back to local Ollama. If that also fails, the caller (recommendations
+endpoint) falls back to a deterministic template string.
 """
 
 import logging
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, APIStatusError
 
 from app.config import settings
 
@@ -48,21 +51,29 @@ async def _call(client: AsyncOpenAI, model: str, prompt: str) -> str:
         max_tokens=150,
         timeout=settings.LLM_TIMEOUT_SECONDS,
     )
-    return response.choices[0].message.content.strip()
+    content = response.choices[0].message.content
+    if not content or not content.strip():
+        raise ValueError(f"Model {model} returned an empty completion")
+    return content.strip()
 
 
 async def generate_coaching_narration(prompt: str) -> str:
     """
-    Try the OpenRouter free model first. On any failure (rate limit,
-    network error, model overloaded), fall back to local Ollama.
-    Callers should still wrap this in their own try/except for a final
-    deterministic fallback if both LLM paths are unavailable.
+    Try each OpenRouter model in settings.OPENROUTER_MODELS in order. On any
+    failure (429 rate limit, timeout, empty completion, network error), move
+    to the next model. If every OpenRouter model fails, fall back to local
+    Ollama. Callers should still wrap this in their own try/except for a
+    final deterministic fallback if both LLM paths are unavailable.
     """
-    try:
-        return await _call(_openrouter_client, settings.OPENROUTER_MODEL, prompt)
-    except Exception as exc:
-        logger.warning("OpenRouter call failed (%s), falling back to local Ollama", exc)
+    for model in settings.OPENROUTER_MODELS:
+        try:
+            return await _call(_openrouter_client, model, prompt)
+        except APIStatusError as exc:
+            logger.warning("OpenRouter model %s failed (HTTP %s), trying next model", model, exc.status_code)
+        except Exception as exc:
+            logger.warning("OpenRouter model %s failed (%s), trying next model", model, exc)
 
+    logger.warning("All OpenRouter models exhausted, falling back to local Ollama")
     try:
         return await _call(_ollama_client, settings.OLLAMA_MODEL, prompt)
     except Exception as exc:

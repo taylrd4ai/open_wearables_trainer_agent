@@ -26,6 +26,9 @@ from app.services.workout_logging_service import (
     calculate_average_rpe,
     calculate_total_volume,
 )
+from app.services.health_engine import recommend_workout
+from app.services.llm_client import generate_coaching_narration
+from app.services.client_profile import CLIENT_PROFILE, INJURY_CONTEXT
 
 logger = logging.getLogger("workout_service")
 
@@ -69,24 +72,57 @@ def start_workout_queue(state: ConversationState, exercises: List[str]) -> None:
 
 
 # --------------------------------------------------------------------------
-# Today's recommendation — reuses the existing recommendations engine.
-# Uses the client's display name (e.g. "Eric Taylor"), NOT the user_id UUID,
-# since that's how the recommendations engine is keyed per the coaching
-# handoff doc.
+# Today's recommendation — calls the service layer directly, mirroring
+# exactly what GET /api/v1/recommendations/workout does, but without
+# importing from the API layer (which would invert the dependency graph
+# and break on FastAPI-specific kwargs like Query()).
 # --------------------------------------------------------------------------
 
 async def get_todays_recommendation(client: str) -> Dict[str, Any]:
     """
-    Wraps the same logic behind GET /api/v1/recommendations/workout.
-    TODO: replace this local import + call with whatever function your
-    app/api/v1/recommendations.py actually calls internally.
-    """
-    from app.api.v1.recommendations import get_workout_recommendation
+    Assembles today's recommendation by calling recommend_workout() from
+    health_engine directly — same call the REST route makes — without
+    importing from the API layer (which inverts the dependency graph and
+    fails on FastAPI-specific kwargs like Query()).
 
-    rec = await get_workout_recommendation(client=client, target_date=date.today())
-    if hasattr(rec, "dict"):
-        rec = rec.dict()
-    return rec
+    `client` is the display name (e.g. "Eric Taylor") used for logging
+    context — the recommendation itself is single-client and driven by
+    CLIENT_PROFILE in client_profile.py.
+    """
+    result = await recommend_workout()
+    decision = result["decision"]
+    snapshot = result["snapshot"]
+
+    prompt = (
+        f"Today's prescription: {decision['situation']} -> {decision['template']}\n"
+        f"Detail: {decision['detail']}\n"
+        f"Recovery tier: {decision.get('recovery_tier')}\n"
+        f"Recovery score: {snapshot.get('recovery_score')}\n"
+        f"Sleep score: {snapshot.get('sleep_score')}\n"
+        f"Played soccer yesterday: {snapshot.get('played_soccer_yesterday')}\n"
+        f"High strain yesterday: {snapshot.get('high_strain_yesterday')}\n\n"
+        "Explain why this is today's recommendation in a short, encouraging way."
+    )
+    try:
+        narration = await generate_coaching_narration(prompt)
+    except Exception:
+        narration = decision["detail"]
+
+    return {
+        "client": client,
+        "date": snapshot["date"],
+        "weekday": snapshot["weekday"],
+        "recovery_tier": decision.get("recovery_tier"),
+        "situation": decision["situation"],
+        "template": decision["template"],
+        "prescription": decision["detail"],
+        "narration": narration,
+        "safety_reminders": {
+            "priorities": INJURY_CONTEXT["priorities"],
+            "escalate_if": INJURY_CONTEXT["escalation_triggers"],
+        },
+        "snapshot": snapshot,
+    }
 
 
 # --------------------------------------------------------------------------

@@ -12,7 +12,10 @@ router = APIRouter(tags=["dashboard"])
 async def get_dashboard_stats() -> Dict[str, Any]:
     """Return summary statistics for the dashboard.
 
-    In production this queries the DB; here returns mock-safe defaults.
+    In production this queries the DB and calls get_biometric_summary();
+    here returns mock-safe defaults using the canonical biometric schema
+    (recovery_percent, hrv, vo2_max_estimate, training_load, source_provider,
+    is_mock) that matches biometric_services.py and the BiometricData model.
     """
     return {
         "total_workouts": 0,
@@ -20,13 +23,16 @@ async def get_dashboard_stats() -> Dict[str, Any]:
         "avg_rpe": None,
         "recent_workouts": [],
         "biometrics": {
-            "recovery_percentage": 0,
-            "hrv_ms": 0,
+            "recovery_percent": 0.0,
+            "hrv": 0.0,
             "strain_score": 0.0,
-            "vo2_max": 0.0,
+            "vo2_max_estimate": 0.0,
             "resting_hr": 0,
             "sleep_hours": 0.0,
             "sleep_quality": "unknown",
+            "training_load": 0.0,
+            "source_provider": "none",
+            "is_mock": True,
             "last_updated": datetime.now().isoformat(),
         },
         "trainer_message": {

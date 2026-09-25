@@ -4,6 +4,11 @@ Combines the day-of-week schedule, OW-derived readiness signals, and
 recent training history (soccer strain, gym sessions) with the
 decision rules from the client's coaching handoff. This produces a
 grounded prescription BEFORE any LLM narration is layered on top.
+
+`client_profile.py` is the single source of truth for the weekly
+schedule and decision rules -- this engine reads WEEKLY_SCHEDULE and
+AGENT_DECISION_RULES rather than hardcoding weekday/situation logic,
+so edits to the handoff doc's tables actually take effect here.
 """
 
 from datetime import date, timedelta
@@ -23,6 +28,13 @@ from app.services.client_profile import (
 # Recovery score thresholds (0-100 scale, Whoop-style recovery %).
 RECOVERY_GREEN_MIN = 67
 RECOVERY_YELLOW_MIN = 34
+
+# Lookup of situation -> prescription code, built from the handoff doc's
+# Agent Decision Rules table so the table is actually consulted rather
+# than duplicated as hardcoded strings.
+_PRESCRIPTION_BY_SITUATION: Dict[str, str] = {
+    rule["situation"]: rule["prescription"] for rule in AGENT_DECISION_RULES
+}
 
 
 def _latest(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -84,6 +96,20 @@ def _recovery_tier(recovery_score: Optional[float]) -> str:
     return "red"
 
 
+def _decision(situation: str, template: str, detail: Any, tier: str) -> Dict[str, Any]:
+    """Assembles a decision dict, tagging it with the prescription code
+    from AGENT_DECISION_RULES when the handoff doc defines one for this
+    situation (some situations, like scheduled rest/soccer days, are
+    pure scheduling and intentionally have no entry in that table)."""
+    return {
+        "situation": situation,
+        "template": template,
+        "detail": detail,
+        "recovery_tier": tier,
+        "prescription_code": _PRESCRIPTION_BY_SITUATION.get(situation),
+    }
+
+
 def evaluate_decision_rule(snapshot: Dict[str, Any], no_gym_access: bool = False) -> Dict[str, Any]:
     """
     Apply the Agent Decision Rules table to today's snapshot.
@@ -92,86 +118,95 @@ def evaluate_decision_rule(snapshot: Dict[str, Any], no_gym_access: bool = False
     escalate for clinical reassessment.
     """
     weekday = snapshot["weekday"]
+    schedule_default = WEEKLY_SCHEDULE.get(weekday, "")
     tier = _recovery_tier(snapshot.get("recovery_score"))
     poor_readiness = tier == "red"
-    high_fatigue = tier in ("red",) or snapshot.get("high_strain_yesterday")
+    soccer_fatigue = snapshot.get("played_soccer_yesterday") or snapshot.get("high_strain_yesterday")
+    high_fatigue = tier == "red" or snapshot.get("high_strain_yesterday")
 
     # Highest-priority safety rule is handled elsewhere (symptom check-in,
-    # not derivable from wearable data) — flagged here as a placeholder.
+    # not derivable from wearable data) -- flagged here as a placeholder.
     # if user reports pain/swelling/locking/instability -> escalate.
 
     if snapshot.get("played_soccer_yesterday") or poor_readiness:
-        return {
-            "situation": "day_after_soccer_or_poor_readiness",
-            "template": "recovery_default",
-            "detail": RECOVERY_CARDIO["wednesday_default"],
-            "recovery_tier": tier,
-        }
+        return _decision(
+            "day_after_soccer_or_poor_readiness",
+            "recovery_default",
+            RECOVERY_CARDIO["wednesday_default"],
+            tier,
+        )
 
     if no_gym_access:
-        return {
-            "situation": "home_no_equipment_time_constrained",
-            "template": "home",
-            "detail": HOME_TEMPLATE,
-            "recovery_tier": tier,
-        }
+        return _decision(
+            "home_no_equipment_time_constrained",
+            "home",
+            HOME_TEMPLATE,
+            tier,
+        )
 
     if high_fatigue:
-        return {
-            "situation": "high_fatigue_poor_sleep_or_soreness",
-            "template": "zone2_only",
-            "detail": "Zone 2 + mobility + light core; no strength work today.",
-            "recovery_tier": tier,
-        }
+        return _decision(
+            "high_fatigue_poor_sleep_or_soreness",
+            "zone2_only",
+            "Zone 2 + mobility + light core; no strength work today.",
+            tier,
+        )
 
-    if weekday == "thursday":
-        return {
-            "situation": "good_readiness_thursday",
-            "template": "machine",
-            "detail": MACHINE_TEMPLATE,
-            "recovery_tier": tier,
-        }
+    # Weekday routing driven by WEEKLY_SCHEDULE (client_profile.py) rather
+    # than a hardcoded weekday==... chain, so schedule edits there take
+    # effect here automatically.
+    if "primary_strength" in schedule_default:
+        return _decision("good_readiness_thursday", "machine", MACHINE_TEMPLATE, tier)
 
-    if weekday == "friday":
-        return {
-            "situation": "good_readiness_friday",
-            "template": "machine_or_dumbbell",
-            "detail": MACHINE_TEMPLATE,
-            "recovery_tier": tier,
-        }
+    if "optional_second_session" in schedule_default:
+        # Handoff doc: "machine OR dumbbell; 1-2 sets if soccer fatigue
+        # persists" -- use the lighter dumbbell template when fatigued,
+        # machine otherwise. Previously this always returned the machine
+        # template regardless of fatigue, silently dropping the dumbbell
+        # option the situation name promised.
+        template_name = "dumbbell" if soccer_fatigue else "machine"
+        template_detail = DUMBBELL_TEMPLATE if soccer_fatigue else MACHINE_TEMPLATE
+        return _decision("good_readiness_friday", template_name, template_detail, tier)
 
-    if weekday in ("monday", "saturday"):
+    if "zone2_cardio" in schedule_default:
         zone2 = RECOVERY_CARDIO["zone2_schedule"].get(f"{weekday}_min", "25-35")
-        return {
-            "situation": "scheduled_zone2",
-            "template": "zone2",
-            "detail": f"Zone 2 cardio, {zone2} min, RPE 3-4/10.",
-            "recovery_tier": tier,
-        }
+        return _decision(
+            "scheduled_zone2",
+            "zone2",
+            f"Zone 2 cardio, {zone2} min, RPE 3-4/10.",
+            tier,
+        )
 
-    if weekday == "sunday":
-        return {
-            "situation": "scheduled_rest",
-            "template": "rest_or_mobility",
-            "detail": "Rest, walk, or short home mobility/stability.",
-            "recovery_tier": tier,
-        }
+    if "rest" in schedule_default:
+        return _decision(
+            "scheduled_rest",
+            "rest_or_mobility",
+            "Rest, walk, or short home mobility/stability.",
+            tier,
+        )
 
-    if weekday == "wednesday":
-        return {
-            "situation": "scheduled_recovery",
-            "template": "recovery_default",
-            "detail": RECOVERY_CARDIO["wednesday_default"],
-            "recovery_tier": tier,
-        }
+    if "recovery_focused" in schedule_default:
+        return _decision(
+            "scheduled_recovery",
+            "recovery_default",
+            RECOVERY_CARDIO["wednesday_default"],
+            tier,
+        )
 
-    # Tuesday: soccer day, no gym prescription needed.
-    return {
-        "situation": "scheduled_soccer",
-        "template": "soccer",
-        "detail": "Competitive soccer 60-90 min.",
-        "recovery_tier": tier,
-    }
+    if "soccer" in schedule_default:
+        return _decision(
+            "scheduled_soccer",
+            "soccer",
+            "Competitive soccer 60-90 min.",
+            tier,
+        )
+
+    return _decision(
+        "no_rule_matched",
+        "zone2_conservative",
+        "No specific rule matched; defaulting to conservative Zone 2 + mobility.",
+        tier,
+    )
 
 
 async def recommend_workout(no_gym_access: bool = False) -> Dict[str, Any]:

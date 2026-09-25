@@ -29,6 +29,7 @@ from app.services.workout_logging_service import (
 from app.services.health_engine import recommend_workout
 from app.services.llm_client import generate_coaching_narration
 from app.services.client_profile import CLIENT_PROFILE, INJURY_CONTEXT
+from app.services.biometric_services import get_biometric_summary
 
 logger = logging.getLogger("workout_service")
 
@@ -258,6 +259,32 @@ async def _recalculate_session_totals(workout_session_id: uuid.UUID) -> None:
             workout_session.rpe_avg = avg_rpe
 
 
+async def _attach_biometric_snapshot(
+    workout_session_id: uuid.UUID, user_id: str
+) -> None:
+    """
+    Fetches today's biometric summary and writes it to
+    WorkoutSession.biometric_snapshot. Called once per session after the
+    first set is logged. Skips silently on any failure so a biometric
+    error never breaks set logging.
+    """
+    try:
+        biometrics = await get_biometric_summary(user_id)
+        async with get_session() as session:
+            workout_session = await session.get(WorkoutSession, workout_session_id)
+            if workout_session is not None and workout_session.biometric_snapshot is None:
+                workout_session.biometric_snapshot = biometrics
+                logger.info(
+                    "Attached biometric snapshot to session=%s provider=%s",
+                    workout_session_id, biometrics.get("source_provider"),
+                )
+    except Exception:
+        logger.exception(
+            "Failed to attach biometric snapshot to session=%s — set logging unaffected",
+            workout_session_id,
+        )
+
+
 async def log_set(
     client: str,
     parsed_set: Dict[str, Any],
@@ -271,6 +298,9 @@ async def log_set(
     writing anything. `client` here is the resolved user_id string
     (settings.ERIC_USER_ID), NOT the display name -- telegram_bot.py is
     responsible for that resolution before calling this.
+
+    After each set is logged, recalculates session totals and attaches
+    today's biometric snapshot to the session (once, on first set).
     """
     if not client:
         raise ValueError("log_set requires a resolved user_id, got empty client")
@@ -350,6 +380,7 @@ async def log_set(
         )
 
     await _recalculate_session_totals(workout_session.id)
+    await _attach_biometric_snapshot(workout_session.id, client)
 
     return {
         "status": "logged",

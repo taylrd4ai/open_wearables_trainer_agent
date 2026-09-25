@@ -12,14 +12,20 @@ from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.workouts import router as workouts_router
 from app.api.v1.biometrics import router as biometrics_router
 from app.api.v1.recommendations import router as recommendations_router
-from app.api.v1.providers import router as providers_router
+from app.api.v1.telegram import (
+    router as telegram_router,
+    start_telegram,
+    stop_telegram,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> Any:
     """Startup/shutdown lifecycle manager."""
     await init_db()
+    await start_telegram()
     yield
+    await stop_telegram()
 
 
 app = FastAPI(
@@ -40,7 +46,7 @@ app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(workouts_router, prefix="/api/v1")
 app.include_router(biometrics_router, prefix="/api/v1")
 app.include_router(recommendations_router, prefix="/api/v1")
-app.include_router(providers_router, prefix="/api/v1")
+app.include_router(telegram_router, prefix="/api/v1")
 
 
 @app.get("/healthz")

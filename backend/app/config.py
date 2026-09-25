@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     TELEGRAM_WEBHOOK_SECRET: str = ""
     PUBLIC_BASE_URL: str = ""
     ERIC_TELEGRAM_CHAT_ID: int = 0
+    # Maps the single current user to their real users.id UUID (as a string),
+    # since there's no telegram_chat_id column on User yet. Revisit with a
+    # real join table if this ever supports more than one client.
+    ERIC_USER_ID: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

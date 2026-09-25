@@ -31,30 +31,36 @@ from app.services.workout_service import (
 
 logger = logging.getLogger("telegram_bot")
 
-# Map Telegram chat_id -> internal client/user id.
-# In production this should be a DB lookup (users.telegram_chat_id),
-# not a hardcoded dict.
+# Map Telegram chat_id -> client identity.
+# "name" is used for the recommendations engine (keyed by display name,
+# per fitness_coaching_handoff.docx). "user_id" is the real users.id UUID,
+# used for all DB writes (WorkoutSession / ExerciseEntry).
+# In production this should be a DB lookup (a telegram_chat_id column on
+# User), not a hardcoded dict -- fine for a single-client deployment for now.
 CHAT_ID_TO_CLIENT = {
-    settings.ERIC_TELEGRAM_CHAT_ID: "Eric Taylor",
+    settings.ERIC_TELEGRAM_CHAT_ID: {
+        "name": "Eric Taylor",
+        "user_id": settings.ERIC_USER_ID,
+    },
 }
 
 
-def _resolve_client(chat_id: int) -> Optional[str]:
+def _resolve_client(chat_id: int) -> Optional[dict]:
     return CHAT_ID_TO_CLIENT.get(chat_id)
 
 
 async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/today -> pulls the existing recommendation + narration and sends it."""
     chat_id = update.effective_chat.id
-    client = _resolve_client(chat_id)
-    if not client:
+    identity = _resolve_client(chat_id)
+    if not identity:
         await update.message.reply_text("This chat isn't linked to a coaching profile yet.")
         return
 
     try:
-        rec = await get_todays_recommendation(client)
+        rec = await get_todays_recommendation(identity["name"])
     except Exception:
-        logger.exception("Failed to fetch today's recommendation for %s", client)
+        logger.exception("Failed to fetch today's recommendation for %s", identity["name"])
         await update.message.reply_text(
             "Couldn't pull today's plan right now — the recommendations service "
             "may be down. Try again in a few minutes."
@@ -83,13 +89,20 @@ async def handle_free_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     classified by the LLM before any DB write happens.
     """
     chat_id = update.effective_chat.id
-    client = _resolve_client(chat_id)
-    if not client:
+    identity = _resolve_client(chat_id)
+    if not identity:
         await update.message.reply_text("This chat isn't linked to a coaching profile yet.")
         return
 
+    if not identity["user_id"]:
+        await update.message.reply_text(
+            "This chat is linked to a coaching profile, but no user_id is "
+            "configured (ERIC_USER_ID is empty in .env) — set logging won't "
+            "work until that's set."
+        )
+
     text = update.message.text.strip()
-    state = await get_or_create_conversation_state(client)
+    state = await get_or_create_conversation_state(identity["name"])
 
     try:
         classification = await llm_client.classify_message_intent(text)
@@ -110,11 +123,14 @@ async def handle_free_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 "Couldn't parse that as a set. Try: 'Bench press 3x8 @ 100lbs'"
             )
             return
-        await log_set(client, parsed, workout_context=state.current_exercise)
-        await update.message.reply_text(
-            f"Logged: {parsed['exercise']} {parsed['sets']}x{parsed['reps']} "
-            f"@ {parsed['weight']}lbs."
-        )
+        result = await log_set(identity["user_id"], parsed, workout_context=state.current_exercise)
+        if result.get("status") == "unresolved_exercise":
+            await update.message.reply_text(result["message"])
+        else:
+            await update.message.reply_text(
+                f"Logged: {parsed['exercise']} {parsed['sets']}x{parsed['reps']} "
+                f"@ {parsed['weight']}lbs."
+            )
         return
 
     if intent == "safety_escalation":
@@ -128,10 +144,10 @@ async def handle_free_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if intent == "modification_request":
         try:
             adjusted = await llm_client.generate_adjusted_prescription(
-                client=client, reason=text
+                client=identity["name"], reason=text
             )
         except Exception:
-            logger.exception("Failed to generate adjusted prescription for %s", client)
+            logger.exception("Failed to generate adjusted prescription for %s", identity["name"])
             await update.message.reply_text(
                 "Noted, but couldn't regenerate the plan right now. "
                 "Default to an easier version and take it slow today."

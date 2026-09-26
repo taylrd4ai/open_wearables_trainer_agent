@@ -22,8 +22,8 @@ export async function logWorkout(data: WorkoutLogRequest): Promise<WorkoutSessio
   return response.data;
 }
 
-export async function getRecommendations(): Promise<Recommendation[]> {
-  const response = await apiClient.get<Recommendation[]>('/api/v1/recommendations');
+export async function getRecommendations(): Promise<Recommendation> {
+  const response = await apiClient.get<Recommendation>('/api/v1/recommendations/workout');
   return response.data;
 }
 

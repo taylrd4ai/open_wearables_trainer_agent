@@ -10,12 +10,12 @@ from app.config import settings
 class OpenWearablesClient:
     def __init__(self) -> None:
         self.base_url = settings.OPEN_WEARABLES_BASE_URL.rstrip("/")
-        self.user_id = settings.OPEN_WEARABLES_USER_ID
+        self.user_id = settings.ERIC_USER_ID
         self._headers = {"X-Open-Wearables-API-Key": settings.OPEN_WEARABLES_API_KEY}
 
     @property
     def is_configured(self) -> bool:
-        return bool(settings.OPEN_WEARABLES_API_KEY and settings.OPEN_WEARABLES_USER_ID)
+        return bool(settings.OPEN_WEARABLES_API_KEY and settings.ERIC_USER_ID)
 
     async def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
         query: List[tuple] = []

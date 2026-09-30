@@ -48,7 +48,7 @@ function SettingsPage() {
       {!configured && !loading ? (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">
           Open Wearables is not configured on the backend. Set OPEN_WEARABLES_API_KEY and
-          OPEN_WEARABLES_USER_ID in the backend .env, then restart the backend container.
+          ERIC_USER_ID in the backend .env, then restart the backend container.
         </div>
       ) : null}
 

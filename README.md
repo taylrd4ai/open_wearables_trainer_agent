@@ -37,7 +37,15 @@ docker compose up --build
 
 Then open the dashboard at **http://localhost:3001**.
 
-Required environment values are documented in `frontend/.env.example` and `backend/app/config.py`.
+Required environment values are documented in `.env.example` and `backend/app/config.py`.
+
+### Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `ERIC_USER_ID` | Canonical DB user id — Open Wearables biometric data is written to this user |
+| `OPEN_WEARABLES_API_KEY` | Open Wearables platform API key |
+| `OPEN_WEARABLES_BASE_URL` | Open Wearables backend URL (default `http://localhost:8000`) |
 
 ## Local development (without Docker)
 
